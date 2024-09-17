@@ -1,0 +1,2 @@
+Features
+1. Add new person to chatbox

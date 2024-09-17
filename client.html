@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="chat-app.css">
+</head>
+<body>
+    <div id="button-box">
+        <p>Enter your name and select existing user if you've already entered the chat before, else select new user</p>
+        <input type="text" id="name">
+        <button id="newUserBtn">New User</button>
+        <button id="extUserBtn">Existing User</button>
+    </div>
+
+    <div id="chat-container">
+        <div id="welcome">
+            <!-- welcome message will be displayed -->
+        </div>
+        <div id="message-list">
+            <!-- list will contain message -->
+        </div>
+        <div id="is-typing">
+
+        </div>
+        <input type="text" id="message-input">
+        <button id="send-message">Send</button>
+    </div>
+
+    <div id="online-users-count">
+        <div id="online-title">Online status</div>
+        <div id="count">
+        </div>
+        <div id="online-users">
+        </div>
+    </div>
+    
+    <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+
+    <script>
+        // Socket code in js
+        const socket = io.connect('http://localhost:3000');
+
+        const onlineCount = document.getElementById('count');
+        const allOnlineUsers = document.getElementById('online-users');
+        const send = document.getElementById('send-message');
+        const messageBox = document.getElementById('message-input');
+        const messageList = document.getElementById('message-list');
+        const isTyping = document.getElementById('is-typing');
+
+        let userName;
+
+        //handles things after name is added
+        async function handleButtonClick(userType) {
+            userName = document.getElementById('name').value;
+            console.log(userName);
+            //if name is not filled
+            if (!userName) {
+                alert("Name field is mandatory");
+                return;
+            }
+
+            function joinChat(userType) {
+                // Remove the buttons
+                document.getElementById('button-box').style.display = 'none';
+                // document.getElementById('existingUserBtn').style.display = 'none';
+
+                console.log("removed buttons");
+                // Display the chat container
+                document.getElementById('chat-container').style.display = 'block';
+                console.log("added text box");
+                // Optionally set a welcome message
+                document.getElementById('welcome').innerText = `Welcome, ${userName}!`;
+
+                const userData = {
+                    type: userType,
+                    name: userName
+                }
+
+                socket.emit("join", userData);
+            }
+
+            //check in db in case of existing user
+            if (userType === 'existing user') {
+                socket.emit('checkUser', userName, (exists) => {
+                    if (!exists) {
+                        alert("Username not found in existing users. Please select 'New User' or check the name spelling.");
+                        return;
+                    }
+                    joinChat(userType);
+                });
+            } else {
+                joinChat(userType);
+            }
+
+        }
+
+    function sendMessage() {
+        // Get the message text and trim any leading/trailing whitespace
+        const messageText = messageBox.value.trim();
+
+        // Check if the message is empty and alert the user if it is
+        if (messageText === "") {
+            alert("Message can't be empty");
+            return;
+        }
+
+        const typing={
+            name: userName,
+            box: "",
+        }
+        socket.emit('is_Typing',typing);
+
+        // Create a message object containing the user name, message text, and current date/time
+        const message = {
+            user: userName,
+            text: messageText,
+            date: new Date().toLocaleString()
+        };
+
+        // Emit the new message event to the server via socket
+        socket.emit('new_message', message);
+
+        // Clear the message input box
+        messageBox.value = '';
+
+        // Create a new div element to contain the entire message
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message-sender');
+
+        // Create a div to contain the user's name and the date/time of the message
+        const nameAndDateDiv = document.createElement('div');
+        nameAndDateDiv.classList.add('name-and-date');
+
+        // Create a div for the user's name and set its text
+        const nameDiv = document.createElement('div');
+        nameDiv.classList.add('name');
+        nameDiv.innerText = message.user;
+
+        // Create a div for the date/time of the message and set its text
+        const dateDiv = document.createElement('div');
+        dateDiv.classList.add('date');
+        dateDiv.innerText = message.date;
+
+        // Create a div for the message text and set its text
+        const textMessageDiv = document.createElement('div');
+        textMessageDiv.classList.add('text-message');
+        textMessageDiv.innerText = message.text;
+
+        // Append the name and date divs to the nameAndDateDiv
+        nameAndDateDiv.appendChild(nameDiv);
+        nameAndDateDiv.appendChild(dateDiv);
+
+        // Append the nameAndDateDiv and textMessageDiv to the main message div
+        messageDiv.appendChild(nameAndDateDiv);
+        messageDiv.appendChild(textMessageDiv);
+
+        // Append the complete message div to the message list
+        messageList.appendChild(messageDiv);
+    }
+
+    function handleKeyPress() {
+        // If messageBox has any input, update isTyping
+        // if (messageBox.value.trim() !== "") {
+        //     isTyping.innerText = `${userName} is typing...`;
+        // } else {
+        //     isTyping.innerText = '';
+        // }
+
+        const typing={
+            name: userName,
+            box: messageBox.value.trim(),
+        }
+        socket.emit('is_Typing',typing);
+    }
+
+
+        document.getElementById('newUserBtn').addEventListener('click', function () {
+            console.log("new user clicked");
+            handleButtonClick('new user');
+        });
+
+        document.getElementById('extUserBtn').addEventListener('click', function () {
+            console.log("existing user clicked");
+            handleButtonClick('existing user');
+        });
+
+        send.addEventListener('click', function () {
+            sendMessage();
+        })
+
+        messageBox.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.keyCode === 13) {
+                sendMessage();
+            }
+        });
+
+        //add eventlistner for messageBox when a key is pressed
+        messageBox.addEventListener('keyup', handleKeyPress);
+
+        socket.on('user_joined', (name) => {
+            console.log("Inside user joined function");
+            // Create a new div element to indicate a user has joined
+            const joinMessageDiv = document.createElement('div');
+            joinMessageDiv.classList.add('user-joined');
+            
+            // Set the message inside the div
+            joinMessageDiv.innerText = `${name} has joined the chat`;
+
+            // Append the join message div to the message list
+            messageList.appendChild(joinMessageDiv);
+        });
+
+
+        socket.on('updateOnlineUsers', (onlineUsers) => {
+            console.log("Inside ")
+            // Empty all contents of onlineCount and allOnlineUsers div
+            onlineCount.innerHTML = '';
+            allOnlineUsers.innerHTML = '';
+
+            // Get count of onlineUsers array
+            const userCount = onlineUsers.length;
+            onlineCount.innerText = "Count: " + userCount;
+
+            // Loop over onlineUsers array
+            onlineUsers.forEach(user => {
+                const userDiv = document.createElement('div');
+                userDiv.classList.add('online-user');
+                userDiv.innerText = user.name;
+                allOnlineUsers.appendChild(userDiv);
+            });
+        });
+
+        socket.on('load_old_messages', (oldMessages) => {
+            console.log("loading old messages");
+
+            // Iterate through each old message
+            oldMessages.forEach(message => {
+
+                const messageDiv = document.createElement('div');
+
+                // If message.user == userName, provide class as 'message-sender', if not, provide class name 'message-receiver'
+                if (message.user === userName) {
+                    messageDiv.classList.add('message-sender');
+                } else {
+                    messageDiv.classList.add('message-receiver');
+                }
+
+                // Create a div to contain the user's name and the date/time of the message
+                const nameAndDateDiv = document.createElement('div');
+                nameAndDateDiv.classList.add('name-and-date');
+
+                // Create a div for the user's name and set its text
+                const nameDiv = document.createElement('div');
+                nameDiv.classList.add('name');
+                nameDiv.innerText = message.user;
+
+                // Create a div for the date/time of the message and set its text
+                const dateDiv = document.createElement('div');
+                dateDiv.classList.add('date');
+                dateDiv.innerText = message.date;
+
+                // Create a div for the message text and set its text
+                const textMessageDiv = document.createElement('div');
+                textMessageDiv.classList.add('text-message');
+                textMessageDiv.innerText = message.text;
+
+                // Append the name and date divs to the nameAndDateDiv
+                nameAndDateDiv.appendChild(nameDiv);
+                nameAndDateDiv.appendChild(dateDiv);
+
+                // Append the nameAndDateDiv and textMessageDiv to the main message div
+                messageDiv.appendChild(nameAndDateDiv);
+                messageDiv.appendChild(textMessageDiv);
+
+                // Append the complete message div to the message list
+                messageList.appendChild(messageDiv);
+            });
+        });
+
+
+        socket.on('broadcast_message',(message)=>{
+            console.log("Inside broadcast message");
+
+            // Create a new div element to contain the entire message
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message-receiver');
+
+            // Create a div to contain the user's name and the date/time of the message
+            const nameAndDateDiv = document.createElement('div');
+            nameAndDateDiv.classList.add('name-and-date');
+
+            // Create a div for the user's name and set its text
+            const nameDiv = document.createElement('div');
+            nameDiv.classList.add('name');
+            nameDiv.innerText = message.user;
+
+            // Create a div for the date/time of the message and set its text
+            const dateDiv = document.createElement('div');
+            dateDiv.classList.add('date');
+            dateDiv.innerText = message.date;
+
+            // Create a div for the message text and set its text
+            const textMessageDiv = document.createElement('div');
+            textMessageDiv.classList.add('text-message');
+            textMessageDiv.innerText = message.text;
+
+            // Append the name and date divs to the nameAndDateDiv
+            nameAndDateDiv.appendChild(nameDiv);
+            nameAndDateDiv.appendChild(dateDiv);
+
+            // Append the nameAndDateDiv and textMessageDiv to the main message div
+            messageDiv.appendChild(nameAndDateDiv);
+            messageDiv.appendChild(textMessageDiv);
+
+            // Append the complete message div to the message list
+            messageList.appendChild(messageDiv);
+        })
+
+        socket.on('userRemoved',(name)=>{
+            console.log(name);
+            // Create a new div element to indicate a user has joined
+            const joinMessageDiv = document.createElement('div');
+            joinMessageDiv.classList.add('user-joined');
+            
+            // Set the message inside the div
+            joinMessageDiv.innerText = `${name} has left the chat`;
+
+            // Append the join message div to the message list
+            messageList.appendChild(joinMessageDiv);
+        })
+
+        socket.on('typing',(is_typing)=>{
+            if (is_typing.box !== "") {
+                isTyping.innerText = `${is_typing.name} is typing...`;
+            } else {
+                isTyping.innerText = '';
+            }
+        })
+    </script>
+</body>
+</html>
